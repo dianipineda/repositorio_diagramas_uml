@@ -1,0 +1,206 @@
+@startuml
+skinparam style strict
+skinparam component {
+  BackgroundColor #F9F9F9
+  BorderColor #555
+  FontColor #333
+}
+skinparam arrow {
+  Color #2C6EBE
+}
+
+title **Arquitectura de Flujo Ingesta Datalake**
+left to right direction
+
+package "Fuentes de datos" {
+ package "Bases de datos Historicos" {
+   package "BD Biosalc Historico" {
+     left to right direction
+     circle #black "Inicio" as ini_hist
+     database "datos disponibles" as data_hist
+
+     ini_hist -> data_hist
+   }
+ }
+ package "Sistemas Core" {
+   package "BD Biosalc - Oracle 19c" {
+     left to right direction
+    
+     rectangle "Limpiar archivelogs obsoletos" as limpieza_bio
+     cloud "¿⚠️Existen logs obsoletos?" as validador_bio
+     circle #black "Inicio" as ini_bio
+     circle "Fin" as fin_bio
+     rectangle "Guardar archivelogs" as archivelogs_bio
+     rectangle "Activar la captura" as activador_bio
+
+     ini_bio -> activador_bio 
+     activador_bio -> archivelogs_bio: genera logs
+     ini_bio .> validador_bio
+     validador_bio -> limpieza_bio: Si
+     limpieza_bio -> fin_bio
+     validador_bio -> fin_bio: No
+    
+   }  
+   package "BD Querix 7 - Oracle 11g" {
+     left to right direction
+    
+     rectangle "Limpiar archivelogs obsoletos" as limpieza_q7
+     cloud "¿⚠️Existen logs obsoletos?" as validador_q7
+     rectangle "Guardar archivelogs" as archivelogs_q7
+     rectangle "Activar la captura" as activador_q7
+     circle #black "Inicio" as ini_q7
+     circle "Fin" as fin_q7
+
+     ini_q7 -> activador_q7
+     activador_q7 -> archivelogs_q7: genera logs
+     ini_q7 .> validador_q7
+     validador_q7 -> limpieza_q7: Si
+     limpieza_q7 -> fin_q7
+     validador_q7 -> fin_q7: No
+   }  
+   package "BD Siesa - SQLServer 2019" {
+     left to right direction
+    
+     rectangle "Limpiar backups obsoletos" as limpieza_sie
+     cloud "¿⚠️Existen backups obsoletos?" as validador_sie
+     rectangle "Guardar backups" as backups_sie
+     rectangle "Activar la captura" as activador_sie
+     circle #black "Inicio" as ini_sie
+     circle "Fin" as fin_sie
+
+     ini_sie -> activador_sie
+     activador_sie -> backups_sie: genera backups
+     ini_sie .> validador_sie
+     validador_sie -> limpieza_sie: Si
+     limpieza_sie -> fin_sie
+     validador_sie -> fin_sie: No
+   }
+ }
+}
+
+
+package "Servidor virtualizado (192.168.10.105)" {
+  package "Contenedor Dockerizado (172.18.0.3)" {
+    package "Plataforma Streaming (Kafka)" {
+      package "Conector Fuente con \n JDBC para BD Biosalc" {
+        left to right direction
+        
+        rectangle "Enviar eventos historicos \n (snapshot inicial) \n a Kafka" as carga_masiva_hist
+        rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_hist
+        
+        carga_masiva_hist -> kafka_topics_hist
+      }    
+      package "Conector Fuente con \n Debezium para BD Biosalc" {
+        left to right direction
+        
+        rectangle "Leer archivelogs \n con LogMiner de Oracle" as logminer_bio
+        cloud "¿⚠️ Es la primera conexión?" as validador_snap_bio
+        rectangle "Enviar eventos de cambios a Kafka" as eventos_cambios
+        rectangle "Enviar eventos historicos \n (snapshot inicial) \n a Kafka" as eventos_historico
+        rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_bio        
+        
+        logminer_bio .> validador_snap_bio
+        validador_snap_bio --> eventos_historico: Si
+        validador_snap_bio -> eventos_cambios: No
+        eventos_historico -> kafka_topics_bio
+        eventos_cambios -> kafka_topics_bio
+      }      
+      package "Conector Fuente con \n Debezium para BD Querix 7" {
+        
+        rectangle "Leer archivelogs \n con LogMiner de Oracle" as logminer_q7
+        cloud "¿⚠️ Es la primera conexión?" as validador_snap_q7
+        rectangle "Enviar eventos de cambios a Kafka" as eventos_cambios_q7
+        rectangle "Enviar eventos historicos \n (snapshot inicial) \n a Kafka" as eventos_historico_q7
+        rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_q7
+    
+        logminer_q7 .> validador_snap_q7
+        validador_snap_q7 --> eventos_historico_q7: Si
+        validador_snap_q7 -> eventos_cambios_q7: No
+        eventos_historico_q7 -> kafka_topics_q7
+        eventos_cambios_q7 -> kafka_topics_q7
+      }      
+      package "Conector Fuente con \n Debezium para BD SIESA" {        
+        rectangle "Leer cambios de BD \n SQLServer con CDC nativo" as cdc_siesa
+        rectangle "Enviar eventos de cambios a Kafka" as eventos_cambios_sie
+        rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_sie
+
+        cdc_siesa .> eventos_cambios_sie
+        eventos_cambios_sie -> kafka_topics_sie
+      }
+      
+      package "Conector Destino con \n Stream Reactor para S3 Minio" {
+        left to right direction
+        rectangle "Consumir eventos de Kafka" as consumer    
+      }      
+    }    
+    package "Limpieza con Icerberg + Spark + Airflow" {
+      left to right direction
+      rectangle "Leer metadatos" as read_metadata_clear
+      rectangle "Leer datos" as read_data_clear
+      rectangle "Aplicar curacion de datos" as curacion_data
+
+      read_data_clear -> curacion_data
+      read_metadata_clear -> curacion_data
+    }    
+    package "Creacion de versiones consumibles con \n Icerberg + Spark + Airflow" {
+      left to right direction
+      rectangle "Leer metadatos" as read_metadata
+      rectangle "Leer datos" as read_data
+    }
+    package "Almacenamiento de data en MinIO" {
+      left to right direction
+      rectangle "Guardar temporalmente \neventos en RAM/disco duro " as processor
+      rectangle "Guardar en MinIO datos\n por sistema origen, categoria \nde transformacion,tabla, año y mes" as write_data
+      rectangle "Guardar en MinIO \n metadatos por sistema origen\n, categoria de transformacion y tabla" as write_metadata
+    
+      processor -> write_data: "persiste data"
+      write_data -> write_metadata: "persiste metadata"
+    }    
+    package "Compactacion al cierre de mes con \n Icerberg + Spark + Airflow" {
+      left to right direction
+      rectangle "Leer Metadata de \nArchivos Fragmentados del Mes" as read_metadata_mes
+      rectangle "Leer Archivos Fragmentados del Mes" as read_data_mes
+      rectangle "Compactar en Archivos Optimizados" as comp_data_mes
+      
+      read_data_mes -> comp_data_mes
+      read_metadata_mes -> comp_data_mes
+    }
+  }  
+}
+
+package "Cliente (192.168.10.x)" {
+   package "Consulta con ClickHouse con UI\n (LinceBI, PowerBI, etc)" {
+     left to right direction
+      rectangle "Consultar metadatos" as req_metadata
+      rectangle "Consultar datos" as req_data
+      storage "Tabla requerida" as respuesta
+   }
+}
+
+' Conexiones entre Sistemas Core y Plataforma Streaming
+archivelogs_bio --> logminer_bio: "lee logs"
+archivelogs_q7 --> logminer_q7: "lee logs"
+backups_sie --> cdc_siesa: "lee cambios"
+data_hist --> carga_masiva_hist: "lee cambios"
+
+kafka_topics_bio --> consumer: "consume eventos"
+kafka_topics_q7 --> consumer: "consume eventos"
+kafka_topics_sie --> consumer: "consume eventos"
+kafka_topics_hist --> consumer: "consume eventos"
+
+consumer --> processor: "procesa eventos"
+write_metadata --> read_metadata
+write_metadata --> read_metadata_clear
+read_data --> write_metadata: "persiste metadata"
+write_data --> read_data: "lee data"
+write_data --> read_data_mes: "lee data"
+comp_data_mes --> write_data: "persiste data"
+comp_data_mes --> write_metadata: "persiste metadata"
+write_data --> read_data_clear: "lee data"
+curacion_data --> write_data: "persiste data"
+curacion_data --> write_metadata: "persiste metadata"
+req_metadata --> write_metadata: "consulta metadatos"
+req_data --> write_data: "consulta datos"
+write_metadata --> respuesta
+write_data --> respuesta
+@enduml
