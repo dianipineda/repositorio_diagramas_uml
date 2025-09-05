@@ -4,7 +4,7 @@ title <size:20>Flujo de datos Consumo Combustible\n<size:12>Proceso de integraci
 ' Footer con comentario sobre las mejoras
 footer Automatización del registro de consumo de combustible con Python. Se eliminó la entrada manual, lo que garantizó\n la precisión y permitió la toma de decisiones en tiempo real para optimizar los gastos de la flota
 
-|#CAFFC4|API solinftec.com|
+|#CAFFC4|API solinftec.com [*]|
 start
 :Consumir datos de la API;
 

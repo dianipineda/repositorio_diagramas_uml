@@ -1,0 +1,15 @@
+@startuml
+
+title <size:20>Flujo de datos Probabilidad de Precipitacion en granjas\n<size:12>Proceso de integracion de datos desde API a base de datos\n<size:10>Python|SQL|ORACLE
+' Footer con comentario sobre las mejoras
+footer Automatización del registro diario de pluviómetros en granjas con Python.\nSe eliminó la entrada manual, lo que garantizóla precisión y facilitó la toma\n  de decisiones en tiempo real para optimizar la gestión de recursos agrícolas
+
+|#CAFFC4|API cenicana.org [*]|
+start
+:Consumir datos de la API;
+
+|#F0CA92|DB Oracle 19c|
+:Insertar datos en la tabla LLUVIA;
+
+end
+@enduml
