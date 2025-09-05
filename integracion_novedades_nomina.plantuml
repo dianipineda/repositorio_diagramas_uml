@@ -1,0 +1,15 @@
+@startuml
+
+title <size:20>Automatización de la gestión de novedades de personal\n<size:12><size:10>Python|SQL|ORACLE
+' Footer con comentario sobre las mejoras
+footer Se diseñó una integración para extraer y consolidar los datos de novedades\n del personal (ingresos, egresos, vacaciones, etc.) en un archivo plano. Esta \nautomatización ayudo al monitoreo de procesos desencadenantes\n cuando se genera una novedad
+
+|#F0CA92|DB Oracle 11g|
+start
+:Obtener datos de\nVista Novedades;
+
+|#EDEDED|Gestor de archivos cliente|
+:Generar datos en\narchivo plano;
+
+end
+@enduml
