@@ -1,0 +1,29 @@
+@startuml
+
+title <size:20>Flujo de datos de costos a labores operativas\n<size:12>Integración de costos financieros con labores operativas\n<size:10>Python|SQL|ORACLE
+' Footer con comentario sobre las mejoras
+footer Se eliminó un proceso de contabilidad manual de fin de mes, permitiendo que la\n importación de datos en el ERP ahora se realice de forma automática. Esto se tradujo en\n una gestión de costos más rápida y precisa, sin necesidad de intervención humana
+
+' Definir particiones
+|#F0CA92|DB Oracle 19c|
+
+fork
+  |#F0CA92|DB Oracle 19c|
+  start
+  :Obtener datos\nde Vista Labores;
+fork again
+  start
+  |#FFC7C7|DB SQLServer 2022|
+  -> Petición DBLINK;
+  :Tablas Disponibles;
+  
+  -> Respuesta DBLINK;
+  
+  |#F0CA92|DB Oracle 19c|
+  :Obtener datos\nde Vista Costos;
+end fork
+
+|#F0CA92|DB Oracle 19c|
+:Insertar datos en\ntabla COSTOS_LABORES;
+end
+@enduml

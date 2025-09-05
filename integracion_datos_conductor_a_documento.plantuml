@@ -6,7 +6,11 @@ footer Se automatizó el proceso de documentación para el despacho de vehículo
 
 |#F0CA92|DB Oracle 19c|
 start
-:Obtener datos de Vistas;
+fork
+:Obtener datos de Vista Conductor;
+fork again
+:Obtener datos de Vista Remision;
+end fork
 
 |#C4D9FF|API filedesk.com.co [*]|
 :Consumir datos de vistas;
