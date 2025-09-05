@@ -1,0 +1,25 @@
+@startuml
+
+title <size:20>Digitalización de Documentos para Conductores\n<size:12>Proceso de integracion de datos de conductores hacia base de datos central de gestion de documentos\n<size:10>Python|SQL|ORACLE
+' Footer con comentario sobre las mejoras
+footer Se automatizó el proceso de documentación para el despacho de vehículos, eliminando el uso de papel y la firma manual.\n Esta mejora garantizó la precisión de los datos y permitió un despacho más rápido de los conductores
+
+|#F0CA92|DB Oracle 19c|
+start
+:Obtener datos de Vistas;
+
+|#C4D9FF|API filedesk.com.co [*]|
+:Consumir datos de vistas;
+
+|#F0CA92|DB Oracle 19c|
+if (Lectura exitosa?) then (sí)
+  :Insertar registro en la tabla LOG;
+else (no)
+  :Manejar error de obtención;
+endif
+
+|#C4D9FF|API filedesk.com.co [*]|
+:Generar Documento con Firma;
+end
+
+@enduml
