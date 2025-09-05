@@ -1,0 +1,15 @@
+@startuml
+
+title <size:20>Flujo de datos de productividad de maquinas en granjas\n<size:12>Automatización del registro de la jornada laboral en máquinas agrícolas\n<size:10>Python|SQL|ORACLE
+' Footer con comentario sobre las mejoras
+footer Se automatizó la captura de datos de jornada de las máquinas,\n reemplazando las bitácoras de papel.El nuevo sistema\n asegura la precisión de los datos y habilita el monitoreo en \ntiempo real de la productividad, lo que se\n traduce en una optimización efectiva de los \nrecursos y una gestión más ágil de las labores en las granjas
+
+|#CAFFC4|API solinftec.com [*]|
+start
+:Consumir datos de la API;
+
+|#F0CA92|DB Oracle 19c|
+:Insertar datos en la\ntabla MAQUINARIA;
+
+end
+@enduml
