@@ -1,0 +1,24 @@
+@startuml
+
+title <size:20>Flujo de datos Productividad en granjas\n<size:12>Proceso de integracion de datos desde base de datos hacia API\n<size:10>Python|SQL|ORACLE
+' Footer con comentario sobre las mejoras
+footer Se automatizó la ingesta de datos de productividad de las granjas, eliminando la necesidad de actualizaciones manuales.\n Esto garantizó la precisión de la información y habilitó el monitoreo en tiempo real del rendimiento, lo que permite la toma de\n decisiones ágiles y estratégicas para optimizar la gestión de la producción agrícola
+
+|#F0CA92|DB Oracle 19c|
+fork
+  :Obtener datos\nTABLA GRANJA;
+fork again
+  :Obtener datos\nTABLA PRODUCTIVIDAD;
+end fork
+
+|#CAFFC4|API solinftec.com [*]|
+:Consumir datos de la base de datos;
+
+|#F0CA92|DB Oracle 19c|
+if (Inserción exitosa?) then (sí)
+  :Insertar registro en la tabla LOG;
+else (no)
+  :Manejar error de inserción;
+endif
+end
+@enduml
