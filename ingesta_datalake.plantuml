@@ -35,7 +35,7 @@ package "Fuentes de datos" {
 
      ini_bio -> activador_bio 
      activador_bio -> archivelogs_bio: genera logs
-     ini_bio .> validador_bio
+     ini_bio -> validador_bio
      validador_bio -> limpieza_bio: Si
      limpieza_bio -> fin_bio
      validador_bio -> fin_bio: No
@@ -53,7 +53,7 @@ package "Fuentes de datos" {
 
      ini_q7 -> activador_q7
      activador_q7 -> archivelogs_q7: genera logs
-     ini_q7 .> validador_q7
+     ini_q7 -> validador_q7
      validador_q7 -> limpieza_q7: Si
      limpieza_q7 -> fin_q7
      validador_q7 -> fin_q7: No
@@ -70,7 +70,7 @@ package "Fuentes de datos" {
 
      ini_sie -> activador_sie
      activador_sie -> backups_sie: genera backups
-     ini_sie .> validador_sie
+     ini_sie -> validador_sie
      validador_sie -> limpieza_sie: Si
      limpieza_sie -> fin_sie
      validador_sie -> fin_sie: No
@@ -99,21 +99,20 @@ package "Servidor virtualizado (192.168.10.105)" {
         rectangle "Enviar eventos historicos \n (snapshot inicial) \n a Kafka" as eventos_historico
         rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_bio        
         
-        logminer_bio .> validador_snap_bio
+        logminer_bio -> validador_snap_bio
         validador_snap_bio --> eventos_historico: Si
         validador_snap_bio -> eventos_cambios: No
         eventos_historico -> kafka_topics_bio
         eventos_cambios -> kafka_topics_bio
       }      
-      package "Conector Fuente con \n Debezium para BD Querix 7" {
-        
+      package "Conector Fuente con \n Debezium para BD Querix 7" {        
         rectangle "Leer archivelogs \n con LogMiner de Oracle" as logminer_q7
         cloud "¿⚠️ Es la primera conexión?" as validador_snap_q7
         rectangle "Enviar eventos de cambios a Kafka" as eventos_cambios_q7
         rectangle "Enviar eventos historicos \n (snapshot inicial) \n a Kafka" as eventos_historico_q7
         rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_q7
     
-        logminer_q7 .> validador_snap_q7
+        logminer_q7 -> validador_snap_q7
         validador_snap_q7 --> eventos_historico_q7: Si
         validador_snap_q7 -> eventos_cambios_q7: No
         eventos_historico_q7 -> kafka_topics_q7
@@ -124,57 +123,156 @@ package "Servidor virtualizado (192.168.10.105)" {
         rectangle "Enviar eventos de cambios a Kafka" as eventos_cambios_sie
         rectangle "Publicar eventos a \nlos tópicos de Kafka" as kafka_topics_sie
 
-        cdc_siesa .> eventos_cambios_sie
+        cdc_siesa -> eventos_cambios_sie
         eventos_cambios_sie -> kafka_topics_sie
-      }
-      
+      }      
       package "Conector Destino con \n Stream Reactor para S3 Minio" {
         left to right direction
-        rectangle "Consumir eventos de Kafka" as consumer    
+        cloud "¿⚠️llegan eventos\ndesde kafka?" as validador_eventos_kafka_true
+        circle "espera" as espera_eventos 
+        cloud "¿⚠️Intento número\nn-1?" as validador_num_intento      
+        rectangle "Consumir eventos" as eventos_a_minio
+        rectangle "Manejar Error" as manejar_error
+        rectangle "Recibir confirmación" as recep_commit
+        rectangle "Preparar confirmación" as prep_commit_conn
+ 
+        validador_eventos_kafka_true -> validador_num_intento: Si
+        validador_eventos_kafka_true -> espera_eventos: No
+        espera_eventos --> validador_eventos_kafka_true
+        validador_num_intento -> eventos_a_minio: Si
+        validador_num_intento -> manejar_error: No
+        recep_commit -> prep_commit_conn
       }      
-    }    
-    package "Limpieza con Icerberg + Spark + Airflow" {
+    }   
+   package "Almacenamiento de información en MinIO" {
       left to right direction
-      rectangle "Leer metadatos" as read_metadata_clear
-      rectangle "Leer datos" as read_data_clear
-      rectangle "Aplicar curacion de datos" as curacion_data
+      rectangle "Guardar temporalmente \neventos en RAM/disco duro " as write_temp
+      rectangle "Escribir datos" as write_data
+      database "data" as data
+      note bottom of data #lightcyan
+        **Particionamiento:**
+        sistema origen/
+        |- categoria de transformacion/
+        |  |- tabla/
+        |  |  |- año/
+        |  |     |- mes/
+      end note
+      database "metadata" as metadata
+      note bottom of metadata #lightcyan
+        **Particionamiento:**
+        sistema origen/
+        |- categoria de transformacion/
+        |  |- tabla/
 
-      read_data_clear -> curacion_data
-      read_metadata_clear -> curacion_data
-    }    
-    package "Creacion de versiones consumibles con \n Icerberg + Spark + Airflow" {
+      end note
+      cloud "¿⚠️Escritura exitosa?" as validador_write_data
+
+      write_temp -> write_data
+      write_data -> validador_write_data
+      write_data .> data
+
+      ' Vínculo invisible para forzar la posición horizontal
+      data .[#d0d0e1]. metadata
+   }
+   package "Programación y orquestación de\nflujos de trabajo con Airflow"{
       left to right direction
-      rectangle "Leer metadatos" as read_metadata
-      rectangle "Leer datos" as read_data
-    }
-    package "Almacenamiento de data en MinIO" {
+      circle "inicio" as ini_airflow
+      rectangle "Ejecutar compactación" as compactacion_airflow
+      rectangle "Ejecutar Limpieza de\narchivos obsoletos" as obsoletos_airflow
+      note bottom of obsoletos_airflow #lightcyan
+        **Archivos Obsoletos:**
+        Archivos que iceberg
+        usaba antes, pero que
+        ya no necesita
+      end note
+      rectangle "Ejecutar Limpieza de\narchivos huérfanos" as huerfanos_airflow
+      note bottom of huerfanos_airflow #lightcyan
+        **Archivos Huérfanos:**
+        Archivos que quedaron
+        en el almacenamiento por
+        un error y que nunca
+        fueron parte de Iceberg
+      end note
+      rectangle "Ejecutar ingesta en postgres" as postgres_airflow
+ 
+      ini_airflow -> compactacion_airflow
+      ini_airflow -> obsoletos_airflow
+      ini_airflow -> huerfanos_airflow
+      ini_airflow -> postgres_airflow
+   }
+   package "Procesamiento de datos a gran escala con Apache Spark"{
       left to right direction
-      rectangle "Guardar temporalmente \neventos en RAM/disco duro " as processor
-      rectangle "Guardar en MinIO datos\n por sistema origen, categoria \nde transformacion,tabla, año y mes" as write_data
-      rectangle "Guardar en MinIO \n metadatos por sistema origen\n, categoria de transformacion y tabla" as write_metadata
-    
-      processor -> write_data: "persiste data"
-      write_data -> write_metadata: "persiste metadata"
-    }    
-    package "Compactacion al cierre de mes con \n Icerberg + Spark + Airflow" {
-      left to right direction
-      rectangle "Leer Metadata de \nArchivos Fragmentados del Mes" as read_metadata_mes
-      rectangle "Leer Archivos Fragmentados del Mes" as read_data_mes
-      rectangle "Compactar en Archivos Optimizados" as comp_data_mes
+      rectangle "Solicitar compactación" as sol_compactacion_spark
+      rectangle "Consolidar archivos pequeños" as consolidacion
+      rectangle "Preparar confirmación" as prep_commit_from_spark
+      consolidacion -> prep_commit_from_spark
+
+      rectangle "Solicitar limpieza obsoletos" as sol_lim_obsoletos_spark
+      rectangle "Limpiar archivos obsoletos" as limpiar_obsoletos
+      limpiar_obsoletos -> prep_commit_from_spark
+
+      rectangle "Solicitar limpieza huérfanos" as sol_lim_huerfanos_spark
+      rectangle "Limpiar archivos huérfanos" as limpiar_huerfanos
+      limpiar_huerfanos -> prep_commit_from_spark
+
+      rectangle "Leer metadata" as leer_metadata_postgres
+      rectangle "Leer data" as leer_data_postgres
+      leer_metadata_postgres -> leer_data_postgres
+      rectangle "preparar respuesta" as respuesta_postgres
+      leer_data_postgres -> respuesta_postgres
+      rectangle "conectar spark a\npostgres con\nconector JDBC" as conexion_postgres
+      respuesta_postgres -> conexion_postgres
+      rectangle "escribe respuesta" as write_postgres
+      conexion_postgres -> write_postgres
+
+    ' **Forzar la alineación horizontal**
       
-      read_data_mes -> comp_data_mes
-      read_metadata_mes -> comp_data_mes
-    }
+   }
+   package "Orquestacion de la lógica de procesamiento con Apache Iceberg"{
+      left to right direction
+      rectangle "Leer Metadata" as leer_metadata_iceberg
+      rectangle "Filtrar archivos pequeños" as fil_pequenos
+      rectangle "Filtrar archivos obsoletos" as fil_obsoletos
+      rectangle "Filtrar archivos huérfanos" as fil_huerfanos
+      rectangle "Recibir confirmación" as recep_commit_from_spark
+      rectangle "Recibir confirmación" as recep_commit_from_connect
+      rectangle "Escribir metadata" as write_metadata
+      
+      leer_metadata_iceberg -> fil_pequenos
+      leer_metadata_iceberg -> fil_obsoletos
+      leer_metadata_iceberg -> fil_huerfanos
+      recep_commit_from_spark -> write_metadata
+      recep_commit_from_connect -> write_metadata
+   }
+   package "Conversion de datos con ClickHouse" {
+     left to right direction
+     rectangle "Leer Metadata" as leer_metadata_ch
+     rectangle "Leer Data" as leer_data_ch
+     rectangle "Crear tabla telacional" as crear_tabla_ch
+     database "tabla relacional" as tabla_ch
+     leer_metadata_ch -> leer_data_ch
+     leer_data_ch -> crear_tabla_ch  
+     crear_tabla_ch .> tabla_ch
+   }
   }  
 }
-
 package "Cliente (192.168.10.x)" {
-   package "Consulta con ClickHouse con UI\n (LinceBI, PowerBI, etc)" {
+   package "Consulta de datos" {
      left to right direction
-      rectangle "Consultar metadatos" as req_metadata
-      rectangle "Consultar datos" as req_data
-      storage "Tabla requerida" as respuesta
+      circle "inicio" as ini_cliente
+      rectangle "Conectar con JDBC\na BD PostgreSQL" as conexion_postgres_client
+      rectangle "Consultar datos" as consulta_postgres
+      ini_cliente -> conexion_postgres_client: "Conexion a postgres"
+      conexion_postgres_client -> consulta_postgres
+      rectangle "Conectar con ODBC\n/JDBC a ClickHouse" as conexion_ch_client
+      ini_cliente -> conexion_ch_client: "Conexion a ClickHouse"
+      rectangle "Consultar tabla" as consulta_ch
+      conexion_ch_client -> consulta_ch
+
    }
+}
+package "DB PostgreSQL (192.168.10.y)"{
+   database "datos disponibles" as postgres
 }
 
 ' Conexiones entre Sistemas Core y Plataforma Streaming
@@ -183,24 +281,43 @@ archivelogs_q7 --> logminer_q7: "lee logs"
 backups_sie --> cdc_siesa: "lee cambios"
 data_hist --> carga_masiva_hist: "lee cambios"
 
-kafka_topics_bio --> consumer: "consume eventos"
-kafka_topics_q7 --> consumer: "consume eventos"
-kafka_topics_sie --> consumer: "consume eventos"
-kafka_topics_hist --> consumer: "consume eventos"
+kafka_topics_bio --> validador_eventos_kafka_true: "envia eventos"
+kafka_topics_q7 --> validador_eventos_kafka_true: "envia eventos"
+kafka_topics_sie --> validador_eventos_kafka_true: "envia eventos"
+kafka_topics_hist --> validador_eventos_kafka_true: "envia eventos"
 
-consumer --> processor: "procesa eventos"
-write_metadata --> read_metadata
-write_metadata --> read_metadata_clear
-read_data --> write_metadata: "persiste metadata"
-write_data --> read_data: "lee data"
-write_data --> read_data_mes: "lee data"
-comp_data_mes --> write_data: "persiste data"
-comp_data_mes --> write_metadata: "persiste metadata"
-write_data --> read_data_clear: "lee data"
-curacion_data --> write_data: "persiste data"
-curacion_data --> write_metadata: "persiste metadata"
-req_metadata --> write_metadata: "consulta metadatos"
-req_data --> write_data: "consulta datos"
-write_metadata --> respuesta
-write_data --> respuesta
+manejar_error --> kafka_topics_bio: "envia error a tópico "Dead letter Queue"
+manejar_error --> kafka_topics_q7: "envia error a tópico "Dead letter Queue"
+manejar_error --> kafka_topics_sie: "envia error a tópico "Dead letter Queue"
+
+eventos_a_minio --> write_temp: "envia eventos"
+validador_write_data --> validador_num_intento: "No"
+validador_write_data --> recep_commit: "Si"
+
+postgres_airflow --> leer_metadata_postgres
+compactacion_airflow --> sol_compactacion_spark
+obsoletos_airflow --> sol_lim_obsoletos_spark
+huerfanos_airflow --> sol_lim_huerfanos_spark
+
+sol_compactacion_spark --> leer_metadata_iceberg: "Solicitud API Iceberg"
+sol_lim_obsoletos_spark --> leer_metadata_iceberg: "Solicitud API Iceberg"
+sol_lim_huerfanos_spark --> leer_metadata_iceberg: "Solicitud API Iceberg"
+
+fil_pequenos --> consolidacion: "Respuesta API Iceberg"
+fil_obsoletos --> limpiar_obsoletos: "Respuesta API Iceberg"
+fil_huerfanos --> limpiar_huerfanos: "Respuesta API Iceberg"
+prep_commit_from_spark --> recep_commit_from_spark
+prep_commit_conn --> recep_commit_from_connect
+
+write_postgres .> postgres
+
+metadata .[#bb99ff].> leer_metadata_postgres
+data .[#bb99ff].> leer_data_postgres
+metadata .[#bb99ff].> leer_metadata_iceberg
+write_metadata .[#bb99ff].> metadata
+
+metadata .[#bb99ff].> leer_metadata_ch
+data .[#bb99ff].> leer_data_ch
+consulta_ch .[#bb99ff].> tabla_ch
+consulta_postgres .[#bb99ff].> postgres
 @enduml
